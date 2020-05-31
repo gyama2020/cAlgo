@@ -41,7 +41,7 @@ namespace cAlgo.Robots
         // TrailingStopLoss
         [Parameter("CLOSE処理にTSLを使用", Group = "CLOSE処理にトレイリングストップを実行", DefaultValue = true)]
         public Boolean bCloseTSL { get; set; }
-        [Parameter("Trailing Stop Loss (pips)", Group = "CLOSE処理にトレイリングストップを実行", DefaultValue = 15, MinValue = 1)]
+        [Parameter("Trailing Stop Loss (pips)", Group = "CLOSE処理にトレイリングストップを実行", DefaultValue = 30, MinValue = 1)]
         public int TrailStopLossInPips { get; set; }
 
         // BollingerBands
@@ -53,7 +53,7 @@ namespace cAlgo.Robots
         public int prdBB { get; set; }
         [Parameter("Deviations", Group = "BollingerBands", DefaultValue = 1)]
         public double devBB1 { get; set; }
-        [Parameter("撤退基準に使用", Group = "BollingerBands", DefaultValue = true)]
+        [Parameter("撤退基準に使用", Group = "BollingerBands", DefaultValue = false)]
         public Boolean bCloseBB { get; set; }
         [Parameter("Deviations", Group = "BollingerBands", DefaultValue = 2)]
         public double devBB2 { get; set; }
@@ -88,9 +88,9 @@ namespace cAlgo.Robots
         // 要チューニング
         [Parameter("STATE: 1 or 2", Group = "TimeOut (Candles)", DefaultValue = 72)]
         public int timeout1 { get; set; }
-        [Parameter("STATE: 3 or 4", Group = "TimeOut (Candles)", DefaultValue = 36)]
+        [Parameter("STATE: 3 or 4", Group = "TimeOut (Candles)", DefaultValue = 72)]
         public int timeout2 { get; set; }
-        [Parameter("STATE: 5 or 6", Group = "TimeOut (Candles)", DefaultValue = 36)]
+        [Parameter("STATE: 5 or 6", Group = "TimeOut (Candles)", DefaultValue = 72)]
         public int timeout3 { get; set; }
 
         // タイムアウト制御用のカウンタ
@@ -261,11 +261,11 @@ namespace cAlgo.Robots
                                 status = 0;
                                 cnt = 0;
                             }
-                            else if (avr1 >= bottom1)
+                            else if (avr1 > bottom1)
                             {
                                 if (bCloseBB == true)
                                 { // ショート：撤退CLOSE
-                                    Print("{0}  ボトム2σ→1σ           STATE:{1},cnt:{2}", avr1, status, cnt);
+                                    Print("{0}  ボトム2σ→1σ CLOSE     STATE:{1},cnt:{2}", avr1, status, cnt);
                                     Close(TradeType.Sell);
                                     status = 0;
                                     cnt = 0;
@@ -273,7 +273,6 @@ namespace cAlgo.Robots
                                 else
                                 {
                                     Print("{0}  ボトム2σ→1σ           STATE:{1},cnt:{2}", avr1, status, cnt);
-                                    Close(TradeType.Sell);
                                     status = 5;
                                     cnt = 0;
                                 }
@@ -297,11 +296,11 @@ namespace cAlgo.Robots
                                 status = 0;
                                 cnt = 0;
                             }
-                            else if (avr1 <= top1)
+                            else if (avr1 < top1)
                             {
                                 if (bCloseBB == true)
                                 { // ロング：撤退CLOSE
-                                    Print("{0}  トップ2σ→1σ           STATE:{1},cnt:{2}", avr1, status, cnt);
+                                    Print("{0}  トップ2σ→1σ CLOSE     STATE:{1},cnt:{2}", avr1, status, cnt);
                                     Close(TradeType.Buy);
                                     status = 0;
                                     cnt = 0;
