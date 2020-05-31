@@ -1,9 +1,0 @@
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\bin\Debug\gy BolliBan Range cBot.dll
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\bin\Debug\gy BolliBan Range cBot.pdb
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\bin\Debug\cAlgo.API.dll
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\bin\Debug\cAlgo.API.xml
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\obj\Debug\gy BolliBan Range cBot.csprojAssemblyReference.cache
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\obj\Debug\gy BolliBan Range cBot.csproj.CoreCompileInputs.cache
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\obj\Debug\gy BolliBan Range cBot.csproj.CopyComplete
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\obj\Debug\gy BolliBan Range cBot.dll
-\\Mac\Home\Documents\cAlgo\Sources\Robots\gy BolliBan Range cBot\gy BolliBan Range cBot\obj\Debug\gy BolliBan Range cBot.pdb
