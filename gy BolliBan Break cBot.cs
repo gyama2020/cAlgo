@@ -29,6 +29,7 @@ namespace cAlgo.Robots
         // 月曜朝のギャップ避け Sunday UTC 22:00
         [Parameter("Monday start at AM7:00(UTC+9)", Group = "Trade", DefaultValue = true)]
         public Boolean mondaymorning { get; set; }
+        public Boolean activetime = true;
 
         // Order
         [Parameter("Quantity (Lots)", Group = "Volume", DefaultValue = 0.1, MinValue = 0.01, Step = 0.01)]
@@ -155,223 +156,232 @@ namespace cAlgo.Robots
         protected override void OnBar()
         {
             // 金曜日OFF設定（月曜日は朝一ギャップを除外したいのでAM7:00から(UTC+9)）
-            if ((!(fridayoff == true && Server.Time.DayOfWeek == DayOfWeek.Friday)) && !(mondaymorning == true && (Server.Time.DayOfWeek == DayOfWeek.Sunday && Server.Time.Hour < 22)))
-               { 
-                var top1 = bbnd1.Top.Last(0);
-                var bottom1 = bbnd1.Bottom.Last(0);
-                var main = bbnd1.Main.LastValue;
-                var top2 = bbnd2.Top.Last(0);
-                var bottom2 = bbnd2.Bottom.Last(0);
-                var avr1 = sma1.Result.LastValue;
+            if ((!(fridayoff == true && Server.Time.DayOfWeek >= DayOfWeek.Friday)) && !(mondaymorning == true && (Server.Time.DayOfWeek == DayOfWeek.Sunday && Server.Time.Hour < 22)))
+                activetime = true;
+            else
+                activetime = false;
+            
+            var top1 = bbnd1.Top.Last(0);
+            var bottom1 = bbnd1.Bottom.Last(0);
+            var main = bbnd1.Main.LastValue;
+            var top2 = bbnd2.Top.Last(0);
+            var bottom2 = bbnd2.Bottom.Last(0);
+            var avr0 = sma1.Result.Last(0);
+            var avr1 = sma1.Result.Last(1);
 
-                // cBot AUTO STOP
-                if (cbotautostop == true)
+            // cBot AUTO STOP
+            if (cbotautostop == true)
+            {
+                if (cbottimer > cbottimeout)
                 {
-                    if (cbottimer > cbottimeout)
+                    Print("cBot AUTO STOP [ cBot Timer : {0} / {1} ]", cbottimer, cbottimeout);
+                    Close(TradeType.Buy);
+                    Close(TradeType.Sell);
+                    Stop();
+                }
+                else
+                    cbottimer = cbottimer + 1;
+            }
+
+            // ステータス変更後カウンタ
+            cnt = cnt + 1;
+
+            // 基準線の鮮度
+            if ((avr1 <= bbnd1.Main.Last(1)) && (avr0 > bbnd1.Main.Last(1)))
+                cnt5 = 0;  // MAINと交差したらリセット
+            else if ((avr1 >= bbnd1.Main.Last(1)) && (avr0 < bbnd1.Main.Last(1)))
+                cnt5 = 0;  // MAINと交差したらリセット
+            else
+                cnt5 = cnt5 + 1;
+
+            // ステータス変化とトレード
+            switch (status)
+            {
+                case 0:
+                if (cnt5 < lastmain)
+                {  // エントリーの条件：直近のMAIN交差から2σまでのスピードが一定以上
+                    if (actsell == true && avr1 >= bottom2 && avr0 < bottom2)
                     {
-                        Print("cBot AUTO STOP [ cBot Timer : {0} / {1} ]", cbottimer, cbottimeout);
-                        Close(TradeType.Buy);
+                        Print("{0}  2σボトム下抜け         STATE:{1}, cnt:{2}, cnt5:{3}", avr0, status, cnt, cnt5);
+                        if (activetime == true)
+                        {
+                            Open(TradeType.Sell);  //ショート
+                            status = 1;
+                        }
+                        cnt = 0;
+                    }
+                    else if (actbuy == true && avr1 <= top2 && avr0 > top2)
+                    {
+                        Print("{0}  2σトップ上抜け         STATE:{1}, cnt:{2}, cnt5:{3}", avr0, status, cnt, cnt5);
+                        if (activetime == true)
+                        {
+                            Open(TradeType.Buy);  //ロング
+                            status = 2;
+                        }
+                        cnt = 0;
+                    }
+                }
+                break;
+
+                case 1:
+                if (timeout1 < cnt)
+                { // ショート：BandWalk
+                    Print("{0}  2σ滞在時間 閾値超過     STATE:{1},cnt:{2}", avr0, status, cnt);
+                    if (bCloseTSL == true)
+                        SetTSL(TradeType.Sell);  //TrailingSLで利を伸ばす
+                    else
+                        Close(TradeType.Sell);   //CLOSE
+                    status = 0;
+                    cnt = 0;
+                }
+                else if (avr0 > bottom2)
+                {
+                    Print("{0}  2σボトム上抜け          STATE:{1}, cnt:{2}, cnt5:{3}", avr0, status, cnt, cnt5);
+                    status = 3;
+                    cnt = 0;
+                }
+                break;
+
+                case 2:
+                if (timeout1 < cnt)
+                { // ロング：BandWalk
+                    Print("{0}  2σOVER タイムアウト     STATE:{1},cnt:{2}", avr0, status, cnt);
+                    if (bCloseTSL == true)
+                        SetTSL(TradeType.Buy);  //TrailingSLで利を伸ばす
+                    else
+                        Close(TradeType.Buy);   //CLOSE
+                    status = 0;
+                    cnt = 0;
+                }
+                else if (avr0 < top2)
+                {
+                    Print("{0}  2σトップ下抜け          STATE:{1}, cnt:{2}, cnt5:{3}", avr0, status, cnt, cnt5);
+                    status = 4;
+                    cnt = 0;
+                }
+                break;
+
+                case 3:
+                if (timeout2 < cnt)
+                {  // ショート：微妙ライン
+                    Print("{0}  2σ～1σ タイムアウト    STATE:{1},cnt:{2}", avr0, status, cnt);
+                    if (bCloseTSL == true)
+                        SetTSL(TradeType.Sell);  //TrailingSLで利を伸ばす
+                    else
+                        Close(TradeType.Sell);   //CLOSE
+                    status = 0;
+                    cnt = 0;
+                }
+                else if (avr0 > bottom1)
+                {
+                    if (bCloseBB == true)
+                    { // ショート：撤退CLOSE
+                        Print("{0}  ボトム2σ→1σ CLOSE     STATE:{1},cnt:{2}", avr0, status, cnt);
                         Close(TradeType.Sell);
-                        Stop();
+                        status = 0;
+                        cnt = 0;
                     }
                     else
-                        cbottimer = cbottimer + 1;
-                }
-
-                // ステータス変更後カウンタ
-                cnt = cnt + 1;
-
-                // 基準線の鮮度
-                if ((sma1.Result.Last(1) < bbnd1.Main.Last(1)) && (avr1 >= bbnd1.Main.Last(1)))
-                    cnt5 = 0;  // MAINと交差したらリセット
-                else if ((sma1.Result.Last(1) > bbnd1.Main.Last(1)) && (avr1 <= bbnd1.Main.Last(1)))
-                    cnt5 = 0;  // MAINと交差したらリセット
-                else
-                    cnt5 = cnt5 + 1;
-
-                    // ステータス変化とトレード
-                    switch (status)
                     {
-                        case 0:
-                            if (cnt5 < lastmain)
-                            {  // エントリーの条件：直近のMAIN交差から2σまでのスピードが一定以上
-                                if (actsell == true && avr1 < bottom2)
-                                {
-                                    Print("{0}  2σボトム下抜け         STATE:{1}, cnt:{2}, cnt5:{3}", avr1, status, cnt, cnt5);
-                                    Open(TradeType.Sell);  //ショート
-                                    status = 1;
-                                    cnt = 0;
-                                }
-                                else if (actbuy == true && avr1 > top2)
-                                {
-                                    Print("{0}  2σトップ上抜け         STATE:{1}, cnt:{2}, cnt5:{3}", avr1, status, cnt, cnt5);
-                                    Open(TradeType.Buy);  //ロング
-                                    status = 2;
-                                    cnt = 0;
-                                }
-                            }
-                            break;
-
-                        case 1:
-                            if (timeout1 < cnt)
-                            { // ショート：BandWalk
-                                Print("{0}  2σ滞在時間 閾値超過     STATE:{1},cnt:{2}", avr1, status, cnt);
-                                if (bCloseTSL == true)
-                                    SetTSL(TradeType.Sell);  //TrailingSLで利を伸ばす
-                                else
-                                    Close(TradeType.Sell);   //CLOSE
-                                status = 0;
-                                cnt = 0;
-                            }
-                            else if (avr1 > bottom2)
-                            {
-                                Print("{0}  2σボトム上抜け          STATE:{1}, cnt:{2}, cnt5:{3}", avr1, status, cnt, cnt5);
-                                status = 3;
-                                cnt = 0;
-                            }
-                            break;
-
-                        case 2:
-                            if (timeout1 < cnt)
-                            { // ロング：BandWalk
-                                Print("{0}  2σOVER タイムアウト     STATE:{1},cnt:{2}", avr1, status, cnt);
-                                if (bCloseTSL == true)
-                                    SetTSL(TradeType.Buy);  //TrailingSLで利を伸ばす
-                                else
-                                    Close(TradeType.Buy);   //CLOSE
-                                status = 0;
-                                cnt = 0;
-                            }
-                            else if (avr1 < top2)
-                            {
-                                Print("{0}  2σトップ下抜け          STATE:{1}, cnt:{2}, cnt5:{3}", avr1, status, cnt, cnt5);
-                                status = 4;
-                                cnt = 0;
-                            }
-                            break;
-
-                        case 3:
-                            if (timeout2 < cnt)
-                            {  // ショート：微妙ライン
-                                Print("{0}  2σ～1σ タイムアウト    STATE:{1},cnt:{2}", avr1, status, cnt);
-                                if (bCloseTSL == true)
-                                    SetTSL(TradeType.Sell);  //TrailingSLで利を伸ばす
-                                else
-                                    Close(TradeType.Sell);   //CLOSE
-                                status = 0;
-                                cnt = 0;
-                            }
-                            else if (avr1 > bottom1)
-                            {
-                                if (bCloseBB == true)
-                                { // ショート：撤退CLOSE
-                                    Print("{0}  ボトム2σ→1σ CLOSE     STATE:{1},cnt:{2}", avr1, status, cnt);
-                                    Close(TradeType.Sell);
-                                    status = 0;
-                                    cnt = 0;
-                                }
-                                else
-                                {
-                                    Print("{0}  ボトム2σ→1σ           STATE:{1},cnt:{2}", avr1, status, cnt);
-                                    status = 5;
-                                    cnt = 0;
-                                }
-                            }
-                            else if (avr1 < bottom2)
-                            {  // ショート：BandWalk
-                                Print("{0}  ボトム2σ再度下抜け      STATE:{1},cnt:{2}", avr1, status, cnt);
-                                status = 1;  //ステータス復帰
-                                cnt = 0;
-                            }
-                            break;
-
-                        case 4:
-                            if (timeout2 < cnt)
-                            {  // ロング：微妙ライン
-                                Print("{0}  2σ～1σ タイムアウト    STATE:{1},cnt:{2}", avr1, status, cnt);
-                                if (bCloseTSL == true)
-                                    SetTSL(TradeType.Buy);  //TrailingSLで利を伸ばす
-                                else
-                                    Close(TradeType.Buy);   //CLOSE
-                                status = 0;
-                                cnt = 0;
-                            }
-                            else if (avr1 < top1)
-                            {
-                                if (bCloseBB == true)
-                                { // ロング：撤退CLOSE
-                                    Print("{0}  トップ2σ→1σ CLOSE     STATE:{1},cnt:{2}", avr1, status, cnt);
-                                    Close(TradeType.Buy);
-                                    status = 0;
-                                    cnt = 0;
-                                }
-                                else
-                                {
-                                    Print("{0}  トップ2σ→1σ           STATE:{1},cnt:{2}", avr1, status, cnt);
-                                    status = 6;
-                                    cnt = 0;
-                                }
-                            }
-                            else if (avr1 > top2)
-                            {  // ロング：BandWalk
-                                Print("{0}  トップ2σ再度上抜け      STATE:{1},cnt:{2}", avr1, status, cnt);
-                                status = 2;  //ステータス復帰
-                                cnt = 0;
-                            }
-                            break;
-
-                        case 5:
-                            if (timeout3 < cnt)
-                            {  // ショート：微妙ライン(バンド拡大期なら伸ばせる水準)
-                                Print("{0}  ボトム1σ～MAIN タイムアウト   STATE:{1},cnt:{2}", avr1, status, cnt);
-                                if (bCloseTSL == true)
-                                    SetTSL(TradeType.Sell);  //TrailingSLで利を伸ばす
-                                else
-                                    Close(TradeType.Sell);   //CLOSE
-                                status = 0;
-                                cnt = 0;
-                            }
-                            else if (avr1 >= main)
-                            {  // ショート：撤退CLOSE
-                                    Print("{0}  ボトム1σ→MAIN           STATE:{1},cnt:{2}", avr1, status, cnt);
-                                    Close(TradeType.Sell);
-                                    status = 0;
-                                    cnt = 0;
-                            }
-                            else if (avr1 < bottom1)
-                            {  // ショート：BandWalk
-                                Print("{0}  ボトム1σ再度下抜け      STATE:{1},cnt:{2}", avr1, status, cnt);
-                                status = 3;  //ステータス復帰
-                                cnt = 0;
-                            }
-                            break;
-
-                        case 6:
-                            if (timeout3 < cnt)
-                            {  // ロング：微妙ライン(バンド拡大期なら伸ばせる水準)
-                                Print("{0}  トップ1σ～MAIN タイムアウト STATE:{1},cnt:{2}", avr1, status, cnt);
-                                if (bCloseTSL == true)
-                                    SetTSL(TradeType.Buy);  //TrailingSLで利を伸ばす
-                                else
-                                    Close(TradeType.Buy);   //CLOSE
-                                status = 0;
-                                cnt = 0;
-                            }
-                            else if (avr1 <= main)
-                            { // ロング：撤退CLOSE
-                                Print("{0}  トップ1σ→MAIN         STATE:{1},cnt:{2}", avr1, status, cnt);
-                                Close(TradeType.Buy);
-                                status = 0;
-                                cnt = 0;
-                            }
-                            else if (avr1 > top1)
-                            {  // ロング：BandWalk
-                                Print("{0}  トップ1σ再度上抜け     STATE:{1},cnt:{2}", avr1, status, cnt);
-                                status = 4;  //ステータス復帰
-                                cnt = 0;
-                            }
-                            break;
+                        Print("{0}  ボトム2σ→1σ           STATE:{1},cnt:{2}", avr0, status, cnt);
+                        status = 5;
+                        cnt = 0;
                     }
+                }
+                else if (avr0 < bottom2)
+                {  // ショート：BandWalk
+                    Print("{0}  ボトム2σ再度下抜け      STATE:{1},cnt:{2}", avr0, status, cnt);
+                    status = 1;  //ステータス復帰
+                    cnt = 0;
+                }
+                break;
+
+                case 4:
+                if (timeout2 < cnt)
+                {  // ロング：微妙ライン
+                    Print("{0}  2σ～1σ タイムアウト    STATE:{1},cnt:{2}", avr0, status, cnt);
+                    if (bCloseTSL == true)
+                        SetTSL(TradeType.Buy);  //TrailingSLで利を伸ばす
+                    else
+                        Close(TradeType.Buy);   //CLOSE
+                    status = 0;
+                    cnt = 0;
+                }
+                else if (avr0 < top1)
+                {
+                    if (bCloseBB == true)
+                    { // ロング：撤退CLOSE
+                        Print("{0}  トップ2σ→1σ CLOSE     STATE:{1},cnt:{2}", avr0, status, cnt);
+                        Close(TradeType.Buy);
+                        status = 0;
+                        cnt = 0;
+                    }
+                    else
+                    {
+                        Print("{0}  トップ2σ→1σ           STATE:{1},cnt:{2}", avr0, status, cnt);
+                        status = 6;
+                        cnt = 0;
+                    }
+                }
+                else if (avr0 > top2)
+                {  // ロング：BandWalk
+                    Print("{0}  トップ2σ再度上抜け      STATE:{1},cnt:{2}", avr0, status, cnt);
+                    status = 2;  //ステータス復帰
+                    cnt = 0;
+                }
+                break;
+
+                case 5:
+                if (timeout3 < cnt)
+                {  // ショート：微妙ライン(バンド拡大期なら伸ばせる水準)
+                    Print("{0}  ボトム1σ～MAIN タイムアウト   STATE:{1},cnt:{2}", avr0, status, cnt);
+                    if (bCloseTSL == true)
+                        SetTSL(TradeType.Sell);  //TrailingSLで利を伸ばす
+                    else
+                        Close(TradeType.Sell);   //CLOSE
+                    status = 0;
+                    cnt = 0;
+                }
+                else if (avr0 >= main)
+                {  // ショート：撤退CLOSE
+                        Print("{0}  ボトム1σ→MAIN            STATE:{1},cnt:{2}", avr0, status, cnt);
+                        Close(TradeType.Sell);
+                        status = 0;
+                        cnt = 0;
+                }
+                else if (avr0 < bottom1)
+                {  // ショート：BandWalk
+                    Print("{0}  ボトム1σ再度下抜け      STATE:{1},cnt:{2}", avr0, status, cnt);
+                    status = 3;  //ステータス復帰
+                    cnt = 0;
+                }
+                break;
+
+                case 6:
+                if (timeout3 < cnt)
+                {  // ロング：微妙ライン(バンド拡大期なら伸ばせる水準)
+                    Print("{0}  トップ1σ～MAIN タイムアウト STATE:{1},cnt:{2}", avr0, status, cnt);
+                    if (bCloseTSL == true)
+                        SetTSL(TradeType.Buy);  //TrailingSLで利を伸ばす
+                    else
+                        Close(TradeType.Buy);   //CLOSE
+                    status = 0;
+                    cnt = 0;
+                }
+                else if (avr0 <= main)
+                { // ロング：撤退CLOSE
+                    Print("{0}  トップ1σ→MAIN         STATE:{1},cnt:{2}", avr0, status, cnt);
+                    Close(TradeType.Buy);
+                    status = 0;
+                    cnt = 0;
+                }
+                else if (avr0 > top1)
+                {  // ロング：BandWalk
+                    Print("{0}  トップ1σ再度上抜け     STATE:{1},cnt:{2}", avr0, status, cnt);
+                    status = 4;  //ステータス復帰
+                    cnt = 0;
+                }
+                break;
             }
         }
     }
